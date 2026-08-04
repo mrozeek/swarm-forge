@@ -1,19 +1,33 @@
 # Engineering Rules
 
 ## Startup Tools
-- On startup, procure the latest version of each required CRAP, mutation, and DRY tool for the project language directly from the listed `github.com/unclebob/...` repositories and get each one ready to run.
-- Resolve each listed repository at its latest available upstream version before installing or building it.
-- Do not rely on stale cached, vendored, or preinstalled copies when a fresh GitHub install/build is possible in the current environment.
+- On startup, make sure the mutation, complexity, duplication, and coverage tools for the project language are installed as project-local dev dependencies and ready to run.
+- Resolve each tool at its latest stable release before installing; do not rely on stale global, vendored, or preinstalled copies when a project-local install is possible in the current environment.
 - Language tool table:
-  - Go: install with `go install`; mutation `github.com/unclebob/mutate4go`, CRAP `github.com/unclebob/crap4go`, DRY `github.com/unclebob/dry4go`.
-  - Clojure: install with Clojure CLI/deps.edn; mutation `github.com/unclebob/clj-mutate`, CRAP `github.com/unclebob/crap4clj`, DRY `github.com/unclebob/dry4clj`.
-  - Java: install with Maven (`mvn`); mutation `github.com/unclebob/mutate4java`, CRAP `github.com/unclebob/crap4java`, DRY `github.com/unclebob/dry4java`.
+  - TypeScript: install with the project's package manager as dev dependencies; unit tests and coverage `vitest` with V8/istanbul coverage; mutation `@stryker-mutator/core` plus the test-runner plugin matching the project's runner; duplication `jscpd`; complexity via the ESLint `complexity` rule or an equivalent per-function complexity reporter.
+- If the project already uses a different test runner (for example Jest), keep the project's runner and select matching Stryker and coverage tooling instead of introducing a second runner.
+
+## CRAP For TypeScript
+- CRAP for a function is comp(f)^2 x (1 - cov(f))^3 + comp(f), where comp is cyclomatic complexity and cov is that function's test branch coverage from 0 to 1.
+- Compute CRAP from the per-function complexity report and per-function coverage data. If the project has no ready-made CRAP reporter, build one small project-local script for this and reuse it across tasks.
+- Counting mutation sites without running mutation tests means generating Stryker's mutant list without executing the mutation test run (instrumentation/dry-run mode); inspect `stryker --help` locally before first use.
 
 ## Language Defaults
-- For Clojure projects, prefer Babashka where possible.
-- For Clojure projects, prefer Speclj for unit and behavior tests.
-- For Clojure or Babashka projects using Speclj, use `github.com/unclebob/speclj-structure-check` to validate test syntax. If a Speclj spec file changed, run the structure check before executing the relevant test command.
-- For Java projects, avoid using Maven to run tests; build dedicated test runners and run those instead.
+- TypeScript runs in `strict` mode; do not introduce `any` in new code except at narrow, documented boundaries.
+- Prefer `vitest` for unit and behavior tests in new projects.
+- Prefer `fast-check` for property tests.
+- Use the package manager indicated by the project lockfile; default to `npm` when none exists. Do not mix package managers in one project.
+
+## Temporal
+For projects using Temporal (TypeScript SDK):
+- Workflow code is deterministic orchestration only. No Node.js built-ins, network or file I/O, environment reads, or unmanaged time and randomness in workflow files; use `sleep()`, `uuid4()`, and the other `@temporalio/workflow` APIs, and put every side effect in an activity.
+- Activities own all I/O and external effects. Workflows call them through `proxyActivities` behind narrow typed interfaces, and workflow files import activity types with type-only imports.
+- Keep activities as thin adapters over pure, injectable core logic so the core stays unit-testable; treat the activity edge as the environmentally unsuitable boundary.
+- Test workflows with `TestWorkflowEnvironment` from `@temporalio/testing` using mocked activities; prefer `createLocal()`, and use `createTimeSkipping()` when the workflow depends on timers. Test activities with `MockActivityEnvironment`.
+- Changed workflows must pass replay verification with `Worker.runReplayHistory` against stored histories when any exist; treat a replay failure as broken behavior, not a flake.
+- When changing workflow logic that may have running executions, gate the change with `patched()`/`deprecatePatch` instead of editing behavior in place.
+- Keep all `@temporalio/*` package versions identical.
+- Keep mutation runs pointed at fast unit tests over pure modules; exclude Temporal-environment-backed suites (`TestWorkflowEnvironment`, replay tests) from mutation and CRAP commands. Prefer extracting workflow decision logic into pure functions so it is mutation-testable.
 
 ## Design And Testability
 - Work in small, reviewable increments.
@@ -28,7 +42,7 @@
 - The Acceptance Pipeline Specification supplies `gherkin-parser` and `gherkin-mutator`; install or build those commands from that repository instead of reimplementing them in the project.
 - Prefer the Babashka APS tools for `gherkin-parser`, `gherkin-mutator`, and related APS support commands.
 - Use Go-based APS tools only if the Babashka APS tools do not work in the current project environment.
-- Project-specific acceptance pipeline components are the acceptance entrypoint generator, acceptance runtime, project step handlers, runner adapter, and convenience scripts.
+- Project-specific acceptance pipeline components are the acceptance entrypoint generator, acceptance runtime, project step handlers, runner adapter, and convenience scripts; write them in the project language.
 - Gherkin acceptance mutation means running `gherkin-mutator` to mutate Gherkin example values.
 - Gherkin acceptance mutation runs must report periodic progress/status so agents can distinguish normal long-running work from a hang.
 
@@ -39,6 +53,6 @@
 - Run the relevant local verification command before handoff whenever the project has one.
 
 ## Guardrails
-- Do not edit mutation testing or Gherkin acceptance mutation manifests by hand; allow approved mutation tools to update those manifests as part of their normal runs.
+- Do not edit mutation testing or Gherkin acceptance mutation manifests by hand, including Stryker incremental files; allow approved mutation tools to update that state as part of their normal runs.
 - Do not commit unrelated local changes or generated artifacts unless required for the task.
 - Before relying on an unfamiliar command, inspect local help or project documentation.

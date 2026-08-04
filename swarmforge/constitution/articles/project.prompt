@@ -1,10 +1,11 @@
 # Project Rules
 
 ## Project Shape
-- This project is configured for SwarmForge with two Codex-backed agents:
+- This project is configured for SwarmForge with two agents:
   coder and cleaner.
 - The coder is the master worktree role.
-- Project language: Babashka.
+- Project language: TypeScript (Node.js).
+- Durable execution: Temporal (TypeScript SDK).
 
 ## Local Configuration
 - Preserve project-local SwarmForge configuration under `swarmforge/`.
